@@ -152,6 +152,15 @@ config CPU_FREQ_DEFAULT_GOV_DARKNESS
 	  frequency lookup tables and optimized scaling triggers instead of
 	  % frequency steps to get smooth up/downscaling dependant on CPU load.
 
+config CPU_FREQ_DEFAULT_GOV_ZZMOOVE
+	  bool "zzmoove"
+	  select CPU_FREQ_GOV_ZZMOOVE
+	  select CPU_FREQ_GOV_PERFORMANCE
+	  help
+	  Use the CPUFreq governor 'zzmoove' as default, using predefined
+	  frequency lookup tables and optimized scaling triggers instead 
+	  % frequency steps to get smooth up/downscaling dependant on CPU load.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -295,6 +304,10 @@ config CPU_FREQ_GOV_DARKNESS
 	  For details, take a look at <file:Documentation/cpu-freq/>.
 
 	  If in doubt, say Y.
+
+config CPU_FREQ_GOV_ZZMOOVE
+	tristate "'zzmoove' cpufreq governor"
+	depends on CPU_FREQ
 
 config CPU_BOOST
 	tristate "Event base short term CPU freq boost"
