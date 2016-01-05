@@ -328,6 +328,43 @@ void machine_kexec(struct kimage *image)
 	/* Flush the reboot_code_buffer in preparation for its execution. */
 	__flush_dcache_area(reboot_code_buffer, relocate_new_kernel_size);
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+	if (image->hardboot) {
+		// hardboot reserve should be 1MB.
+		unsigned long hardboot_reserve = KEXEC_HB_PAGE_ADDR;
+		void *hardboot_map = ioremap(hardboot_reserve, SZ_1M);
+		// post reboot reloc code is 4K inside the hardboot page
+		void* post_reboot_code_buffer = hardboot_map + PAGE_SIZE;
+		// post reboot reloc list is 8K after the hardboot page.
+		unsigned long post_reboot_list_loc = hardboot_reserve +
+			(PAGE_SIZE * 2);
+		unsigned long *hardboot_list_loc_virt = hardboot_map +
+			(PAGE_SIZE * 2);
+
+		// temp space is 64MB in front of hardboot reserve.
+		// Must be big enough to hold kernel, initrd, and dtb.
+		unsigned long tempdest = hardboot_reserve - (SZ_1M * 64);
+
+		// create new relocation list for post reboot reloc
+		// TODO: check for overflow of temp space and hardboot page
+		kexec_list_hardboot_create_post_reboot_list(image->head,
+			hardboot_list_loc_virt, tempdest);
+
+		// setup post-reboot reloc code
+		arm64_kexec_kimage_head = IND_INDIRECTION | post_reboot_list_loc;
+		arm64_kexec_hardboot = 0;
+
+		// copy relocation code to hardboot page for post-reboot reloc
+		memcpy(post_reboot_code_buffer, relocate_new_kernel,
+			relocate_new_kernel_size);
+
+		// flush the entire hardboot page
+		__flush_dcache_area(hardboot_map, SZ_1M);
+		// unmap the page
+		iounmap(hardboot_map);
+	}
+#endif
+
 	/* Flush the kimage list. */
 	kexec_list_flush(image->head);
 
