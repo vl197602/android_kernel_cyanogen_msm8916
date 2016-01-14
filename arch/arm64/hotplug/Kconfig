@@ -11,3 +11,9 @@ config BRICKED_HOTPLUG
  	default y
  	help
  	  This enables kernel based multi core control. 
+
+config MAKO_HOTPLUG
+ 	bool "Mako Hotplug"
+ 	default n
+ 	help
+ 	  Mako Hotplug: A custom hotplug by fransico franco
