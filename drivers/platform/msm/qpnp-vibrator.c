@@ -445,7 +445,7 @@ static int qpnp_vibrator_probe(struct spmi_device *spmi)
 	if (rc < 0)
 		return rc;
 
-        device_create_file(vib->timed_dev.dev, &dev_attr_vtg_level);
+	device_create_file(vib->timed_dev.dev, &dev_attr_vtg_level);
 
 	if (vib->boot_up_vibe)
 		qpnp_vib_enable(&vib->timed_dev, vib->boot_up_vibe);
