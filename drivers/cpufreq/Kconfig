@@ -182,6 +182,11 @@ config CPU_FREQ_DEFAULT_GOV_LIONFISH
 	help
 	  Use the CPUFreq governor 'lionfish' as default.
 
+config CPU_FREQ_DEFAULT_GOV_DESPAIR
+	bool "despair"
+	select CPU_FREQ_GOV_DESPAIR
+	help
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -323,6 +328,10 @@ config CPU_FREQ_GOV_LIONFISH
 	  module will be called cpufreq_lionfish.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_DESPAIR
+	tristate "'despair' cpufreq governor"
+	depends on CPU_FREQ
 
 config CPU_FREQ_GOV_CONSERVATIVE
 	tristate "'conservative' cpufreq governor"
