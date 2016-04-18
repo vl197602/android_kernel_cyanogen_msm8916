@@ -45,14 +45,14 @@
 struct cpu_stats {
 	unsigned int counter;
 	u64 timestamp;
-} stats = {
+} hotplug_stats = {
 	.counter = 0,
 	.timestamp = 0,
 };
 
 struct hotplug_tunables {
-	/*
-	 * Enable/Disable Hotplug Work
+	/**
+	 * whether make_hotplug is enabled or not
 	 */
 	unsigned int enabled;
 
@@ -156,14 +156,14 @@ static void cpu_revive(unsigned int load)
 	 * cpus in question. If the device is under stress for at least 300ms
 	 * online all cores, no questions asked. 300ms here equals three samples
 	 */
-	if (load >= HIGH_LOAD && stats.counter >= counter_hysteria)
+	if (load >= HIGH_LOAD && hotplug_stats.counter >= counter_hysteria)
 		goto online_all;
-	else if (stats.counter < t->high_load_counter)
+	else if (hotplug_stats.counter < t->high_load_counter)
 		return;
 
 online_all:
 	cpus_online_work();
-	stats.timestamp = ktime_to_us(ktime_get());
+	hotplug_stats.timestamp = ktime_to_us(ktime_get());
 }
 
 static void cpu_smash(unsigned int load)
@@ -171,7 +171,7 @@ static void cpu_smash(unsigned int load)
 	struct hotplug_tunables *t = &tunables;
 	u64 extra_time = MIN_CPU_UP_US;
 
-	if (stats.counter >= t->high_load_counter)
+	if (hotplug_stats.counter >= t->high_load_counter)
 		return;
 
 	/*
@@ -180,7 +180,7 @@ static void cpu_smash(unsigned int load)
 	 * postpone the cpu offline process to at least another second
 	 */
 	if (cpus_cpufreq_work())
-		stats.timestamp = ktime_to_us(ktime_get());
+		hotplug_stats.timestamp = ktime_to_us(ktime_get());
 
 	/*
 	 * Let's not unplug this cpu unless its been online for longer than
@@ -190,7 +190,7 @@ static void cpu_smash(unsigned int load)
 	if (t->min_time_cpu_online > 1)
 		extra_time = t->min_time_cpu_online * MIN_CPU_UP_US;
 
-	if (ktime_to_us(ktime_get()) < stats.timestamp + extra_time)
+	if (ktime_to_us(ktime_get()) < hotplug_stats.timestamp + extra_time)
 		return;
 
 	/*
@@ -205,7 +205,7 @@ static void cpu_smash(unsigned int load)
 	/*
 	 * reset the counter yo
 	 */
-	stats.counter = 0;
+	hotplug_stats.counter = 0;
 }
 
 static void __ref decide_hotplug_func(struct work_struct *work)
@@ -228,8 +228,9 @@ static void __ref decide_hotplug_func(struct work_struct *work)
 	 * reschedule early when users desire to run with all cores online
 	 */
 	if (unlikely(!t->load_threshold &&
-			online_cpus == NUM_POSSIBLE_CPUS))
+			online_cpus == NUM_POSSIBLE_CPUS)) {
 		goto reschedule;
+	}
 
 	for (cpu = 0; cpu < 2; cpu++)
 		cur_load += cpufreq_quick_get_util(cpu);
@@ -237,14 +238,14 @@ static void __ref decide_hotplug_func(struct work_struct *work)
 	cur_load >>= 1;
 
 	if (cur_load >= t->load_threshold) {
-		if (stats.counter < t->max_load_counter)
-			++stats.counter;
+		if (hotplug_stats.counter < t->max_load_counter)
+			++hotplug_stats.counter;
 
 		if (online_cpus <= 2)
 			cpu_revive(cur_load);
 	} else {
-		if (stats.counter)
-			--stats.counter;
+		if (hotplug_stats.counter)
+			--hotplug_stats.counter;
 
 		if (online_cpus > 2)
 			cpu_smash(cur_load);
