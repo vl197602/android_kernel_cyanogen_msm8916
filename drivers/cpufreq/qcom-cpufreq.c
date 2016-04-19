@@ -90,6 +90,12 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 	}
 
 	table = cpufreq_frequency_get_table(policy->cpu);
+	if (!table) {
+		pr_err("cpufreq: Failed to get frequency table for CPU%u\n",
+		       policy->cpu);
+		ret = -ENODEV;
+		goto done;
+	}
 	if (cpufreq_frequency_table_target(policy, table, target_freq, relation,
 			&index)) {
 		pr_err("cpufreq: invalid target_freq: %d\n", target_freq);
@@ -139,16 +145,8 @@ static int msm_cpufreq_init(struct cpufreq_policy *policy)
 		if (cpu_clk[cpu] == cpu_clk[policy->cpu])
 			cpumask_set_cpu(cpu, policy->cpus);
 
-	if (cpufreq_frequency_table_cpuinfo(policy, table)) {
-	#ifdef CONFIG_MSM_CPU_FREQ_SET_MIN_MAX
- 	policy->cpuinfo.min_freq = CONFIG_MSM_CPU_FREQ_MIN;
- 	policy->cpuinfo.max_freq = CONFIG_MSM_CPU_FREQ_MAX;
-	#endif
- 	}
-	#ifdef CONFIG_MSM_CPU_FREQ_SET_MIN_MAX
- 	policy->min = CONFIG_MSM_CPU_FREQ_MIN;
- 	policy->max = CONFIG_MSM_CPU_FREQ_MAX;
-	#endif
+	if (cpufreq_frequency_table_cpuinfo(policy, table))
+		pr_err("cpufreq: failed to get policy min/max\n");
 
 	cur_freq = clk_get_rate(cpu_clk[policy->cpu])/1000;
 
@@ -252,13 +250,17 @@ static int msm_cpufreq_suspend(void)
 
 static int msm_cpufreq_resume(void)
 {
-	int cpu, ret;
+	int cpu;
+#ifndef CONFIG_CPU_BOOST
+	int ret;
 	struct cpufreq_policy policy;
+#endif
 
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_suspend, cpu).device_suspended = 0;
 	}
 
+#ifndef CONFIG_CPU_BOOST
 	/*
 	 * Freq request might be rejected during suspend, resulting
 	 * in policy->cur violating min/max constraint.
@@ -280,6 +282,7 @@ static int msm_cpufreq_resume(void)
 				cpu);
 	}
 	put_online_cpus();
+#endif
 
 	return NOTIFY_DONE;
 }

@@ -17,10 +17,10 @@
 #include <trace/events/power.h>
 #include <linux/moduleparam.h>
 
-#include "power.h"
-
 static bool enable_si_ws = true;
 module_param(enable_si_ws, bool, 0644);
+static bool enable_msm_hsic_ws = true;
+module_param(enable_msm_hsic_ws, bool, 0644);
 static bool enable_wlan_rx_wake_ws = true;
 module_param(enable_wlan_rx_wake_ws, bool, 0644);
 static bool enable_wlan_ctrl_wake_ws = true;
@@ -31,6 +31,8 @@ static bool enable_bluedroid_timer_ws = true;
 module_param(enable_bluedroid_timer_ws, bool, 0644);
 static bool enable_bluesleep_ws = true;
 module_param(enable_bluesleep_ws, bool, 0644);
+
+#include "power.h"
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -427,6 +429,9 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 
 	if (!enable_si_ws && !strcmp(ws->name, "sensor_ind"))
 		return;
+
+	if (!enable_msm_hsic_ws && !strcmp(ws->name, "msm_hsic_host"))
+                return;
 
 	if (!enable_wlan_rx_wake_ws && !strcmp(ws->name, "wlan_rx_wake"))
                 return;

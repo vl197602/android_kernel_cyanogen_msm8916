@@ -455,7 +455,7 @@ static inline void mdss_mdp_pp_get_dcm_state(struct mdss_mdp_pipe *pipe,
 		*dcm_state = pipe->mixer_left->ctl->mfd->dcm_state;
 }
 
-inline int linear_map(int in, int *out, int in_max, int out_max)
+static inline int linear_map(int in, int *out, int in_max, int out_max)
 {
 	if (in < 0 || !out || in_max <= 0 || out_max <= 0)
 		return -EINVAL;
@@ -4706,7 +4706,7 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 	mutex_lock(&ad->lock);
 	if ((!PP_AD_STATE_IS_INITCFG(ad->state) &&
 			!PP_AD_STS_IS_DIRTY(ad->sts)) &&
-			!input->mode == MDSS_AD_MODE_CALIB) {
+			input->mode != MDSS_AD_MODE_CALIB) {
 		pr_warn("AD not initialized or configured.\n");
 		ret = -EPERM;
 		goto error;
@@ -5297,10 +5297,11 @@ static int  pp_ad_attenuate_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out)
 		return -EINVAL;
 	}
 	lut_interval = (MDSS_MDP_AD_BL_SCALE + 1) / (AD_BL_ATT_LUT_LEN - 1);
-	bl_att = ad->bl_att_lut[n] + (bl - lut_interval * n) *
-			(ad->bl_att_lut[n + 1] - ad->bl_att_lut[n]) /
-			lut_interval;
-	pr_debug("n = %d, bl_att = %d\n", n, bl_att);
+	bl_att = ((ad->bl_att_lut[n + 1] - ad->bl_att_lut[n]) *
+		(bl - lut_interval * n) + (ad->bl_att_lut[n] * lut_interval)) /
+		lut_interval;
+	pr_debug("n = %u, bl_att_lut[%u] = %u, bl_att_lut[%u] = %u, bl_att = %u\n",
+		n, n, ad->bl_att_lut[n], n + 1, ad->bl_att_lut[n + 1], bl_att);
 	if (ad->init.alpha_base)
 		*bl_out = (ad->init.alpha * bl_att +
 			(ad->init.alpha_base - ad->init.alpha) * bl) /
@@ -5323,6 +5324,7 @@ static int pp_ad_linearize_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out,
 {
 
 	u32 n;
+	uint32_t *bl_lut = NULL;
 	int ret = -EINVAL;
 
 	if (bl < 0 || bl > ad->bl_mfd->panel_info->bl_max) {
@@ -5332,6 +5334,14 @@ static int pp_ad_linearize_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out,
 	}
 
 	pr_debug("bl_in = %d, inv = %d\n", bl, inv);
+	if (inv == MDP_PP_AD_BL_LINEAR_INV) {
+		bl_lut = ad->bl_lin;
+	} else if (inv == MDP_PP_AD_BL_LINEAR) {
+		bl_lut = ad->bl_lin_inv;
+	} else {
+		pr_err("invalid inv param: inv = %d\n", inv);
+		return -EINVAL;
+	}
 
 	/* map panel backlight range to AD backlight range */
 	linear_map(bl, &bl, ad->bl_mfd->panel_info->bl_max,
@@ -5339,30 +5349,19 @@ static int pp_ad_linearize_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out,
 
 	pr_debug("Before linearization = %d\n", bl);
 	n = bl * (AD_BL_LIN_LEN - 1) / MDSS_MDP_AD_BL_SCALE;
-	pr_debug("n = %d\n", n);
+	pr_debug("n = %u\n", n);
 	if (n > (AD_BL_LIN_LEN - 1)) {
 		pr_err("Invalid index for BL linearization: %d.\n", n);
 		return ret;
 	} else if (n == (AD_BL_LIN_LEN - 1)) {
-		if (inv == MDP_PP_AD_BL_LINEAR_INV)
-			*bl_out = ad->bl_lin_inv[n];
-		else if (inv == MDP_PP_AD_BL_LINEAR)
-			*bl_out = ad->bl_lin[n];
+		*bl_out = bl_lut[n];
 	} else {
 		/* linear piece-wise interpolation */
-		if (inv == MDP_PP_AD_BL_LINEAR_INV) {
-			*bl_out = bl * (AD_BL_LIN_LEN - 1) *
-				(ad->bl_lin_inv[n + 1] - ad->bl_lin_inv[n]) /
-				MDSS_MDP_AD_BL_SCALE - n *
-				(ad->bl_lin_inv[n + 1] - ad->bl_lin_inv[n]) +
-				ad->bl_lin_inv[n];
-		} else if (inv == MDP_PP_AD_BL_LINEAR) {
-			*bl_out = bl * (AD_BL_LIN_LEN - 1) *
-				(ad->bl_lin[n + 1] - ad->bl_lin[n]) /
-				MDSS_MDP_AD_BL_SCALE -
-				n * (ad->bl_lin[n + 1] - ad->bl_lin[n]) +
-				ad->bl_lin[n];
-		}
+		*bl_out = ((bl_lut[n + 1] - bl_lut[n]) *
+			(bl - n * MDSS_MDP_AD_BL_SCALE /
+			(AD_BL_LIN_LEN  - 1)) + bl_lut[n] *
+			MDSS_MDP_AD_BL_SCALE / (AD_BL_LIN_LEN  - 1)) *
+			(AD_BL_LIN_LEN  - 1) / MDSS_MDP_AD_BL_SCALE;
 	}
 	pr_debug("After linearization = %d\n", *bl_out);
 

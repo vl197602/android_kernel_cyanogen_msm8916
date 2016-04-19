@@ -52,7 +52,7 @@ static struct delayed_work intelli_plug_boost;
 static struct workqueue_struct *intelliplug_wq;
 static struct workqueue_struct *intelliplug_boost_wq;
 
-static unsigned int __read_mostly intelli_plug_active = 0;
+static unsigned int __read_mostly intelli_plug_active = 1;
 module_param(intelli_plug_active, uint, 0664);
 
 static unsigned int touch_boost_active = 1;
@@ -456,7 +456,7 @@ static void intelli_plug_suspend(struct early_suspend *handler)
 	}
 }
 
-static void wakeup_boost(void)
+static void wakeup_cp_boost(void)
 {
 	unsigned int cpu;
 	struct cpufreq_policy *policy;
@@ -492,7 +492,7 @@ static void __ref intelli_plug_resume(struct early_suspend *handler)
 			cpu_up(cpu);
 		}
 
-		wakeup_boost();
+		wakeup_cp_boost();
 		screen_off_limit(false);
 	}
 	queue_delayed_work_on(0, intelliplug_wq, &intelli_plug_work,
