@@ -93,8 +93,7 @@ extern unsigned int sysctl_sched_nr_migrate;
 extern unsigned int sysctl_sched_time_avg;
 extern unsigned int sysctl_timer_migration;
 extern unsigned int sysctl_sched_shares_window;
-extern unsigned int sysctl_sched_yield_sleep_duration;
-extern int sysctl_sched_yield_sleep_threshold;
+
 int sched_proc_update_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *length,
 		loff_t *ppos);
@@ -139,6 +138,15 @@ extern unsigned int sysctl_sched_cfs_bandwidth_slice;
 
 #ifdef CONFIG_SCHED_AUTOGROUP
 extern unsigned int sysctl_sched_autogroup_enabled;
+#endif
+
+#ifdef CONFIG_SCHEDSTATS
+extern unsigned int sysctl_sched_latency_panic_threshold;
+extern unsigned int sysctl_sched_latency_warn_threshold;
+
+extern int sched_max_latency_sysctl(struct ctl_table *table, int write,
+				    void __user *buffer, size_t *lenp,
+				    loff_t *ppos);
 #endif
 
 extern int sched_rr_timeslice;
