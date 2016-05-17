@@ -262,7 +262,7 @@ static inline bool rwsem_try_write_lock(long count, struct rw_semaphore *sem)
 	 * to reduce unnecessary expensive cmpxchg() operations.
 	 */
 	if (count == RWSEM_WAITING_BIAS &&
-	    cmpxchg(&sem->count, RWSEM_WAITING_BIAS,
+	    cmpxchg_acquire(&sem->count, RWSEM_WAITING_BIAS,
 		    RWSEM_ACTIVE_WRITE_BIAS) == RWSEM_WAITING_BIAS) {
 		if (!list_is_singular(&sem->wait_list))
 			rwsem_atomic_update(RWSEM_WAITING_BIAS, sem);
@@ -279,13 +279,14 @@ static inline bool rwsem_try_write_lock(long count, struct rw_semaphore *sem)
  */
 static inline bool rwsem_try_write_lock_unqueued(struct rw_semaphore *sem)
 {
-	long old, count = ACCESS_ONCE(sem->count);
+	long old, count = READ_ONCE(sem->count);
 
 	while (true) {
 		if (!(count == 0 || count == RWSEM_WAITING_BIAS))
 			return false;
 
-		old = cmpxchg(&sem->count, count, count + RWSEM_ACTIVE_WRITE_BIAS);
+		old = cmpxchg_acquire(&sem->count, count,
+				      count + RWSEM_ACTIVE_WRITE_BIAS);
 		if (old == count) {
 			rwsem_set_owner(sem);
 			return true;
@@ -304,9 +305,9 @@ static inline bool rwsem_can_spin_on_owner(struct rw_semaphore *sem)
 		return false;
 
 	rcu_read_lock();
-	owner = ACCESS_ONCE(sem->owner);
+	owner = READ_ONCE(sem->owner);
 	if (!owner) {
-		long count = ACCESS_ONCE(sem->count);
+		long count = READ_ONCE(sem->count);
 		/*
 		 * If sem->owner is not set, yet we have just recently entered the
 		 * slowpath with the lock being active, then there is a possibility
@@ -376,7 +377,7 @@ static bool rwsem_optimistic_spin(struct rw_semaphore *sem)
 		goto done;
 
 	while (true) {
-		owner = ACCESS_ONCE(sem->owner);
+		owner = READ_ONCE(sem->owner);
 		if (owner && !rwsem_spin_on_owner(sem, owner))
 			break;
 
@@ -463,7 +464,7 @@ struct rw_semaphore __sched *rwsem_down_write_failed(struct rw_semaphore *sem)
 
 	/* we're now waiting on the lock, but no longer actively locking */
 	if (waiting) {
-		count = ACCESS_ONCE(sem->count);
+		count = READ_ONCE(sem->count);
 
 		/*
 		 * If there were already threads queued before us and there are

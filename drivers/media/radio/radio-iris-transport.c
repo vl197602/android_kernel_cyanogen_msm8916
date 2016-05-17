@@ -40,7 +40,7 @@ struct radio_data {
 struct radio_data hs;
 #ifndef CONFIG_RADIO_IRIS_TRANSPORT_NO_FIRMWARE
 static DEFINE_MUTEX(fm_smd_enable);
-static int fmsmd_set;
+static int fmsmd_set = 0;
 static int hcismd_fm_set_enable(const char *val, struct kernel_param *kp);
 module_param_call(fmsmd_set, hcismd_fm_set_enable, NULL, &fmsmd_set, 0644);
 static void radio_hci_smd_deregister(void);
@@ -52,7 +52,11 @@ static struct work_struct *reset_worker;
 
 static void radio_hci_smd_destruct(struct radio_hci_dev *hdev)
 {
-	radio_hci_unregister_dev(hs.hdev);
+	if (hs.hdev != NULL) {
+		radio_hci_unregister_dev(hs.hdev);
+		kfree(hs.hdev);
+		hs.hdev = NULL;
+	}
 }
 
 
@@ -210,12 +214,20 @@ void radio_hci_smd_deregister(void)
 static void radio_hci_smd_deregister(void)
 #endif
 {
-	radio_hci_unregister_dev(hs.hdev);
-	kfree(hs.hdev);
-	hs.hdev = NULL;
+	struct radio_data *hsmd = &hs;
+
+	if (hsmd == NULL)
+		goto done;
+
+	if (hs.hdev != NULL) {
+		radio_hci_unregister_dev(hs.hdev);
+		kfree(hs.hdev);
+		hs.hdev = NULL;
+	}
 
 	smd_close(hs.fm_channel);
 	hs.fm_channel = 0;
+done:
 #ifdef CONFIG_RADIO_IRIS_TRANSPORT_NO_FIRMWARE
 	fmsmd_ready = -1;
 #else
