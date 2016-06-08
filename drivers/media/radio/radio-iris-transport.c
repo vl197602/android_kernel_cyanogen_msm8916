@@ -52,11 +52,7 @@ static struct work_struct *reset_worker;
 
 static void radio_hci_smd_destruct(struct radio_hci_dev *hdev)
 {
-	if (hs.hdev != NULL) {
-		radio_hci_unregister_dev(hs.hdev);
-		kfree(hs.hdev);
-		hs.hdev = NULL;
-	}
+	radio_hci_unregister_dev(hs.hdev);
 }
 
 
@@ -214,11 +210,9 @@ void radio_hci_smd_deregister(void)
 static void radio_hci_smd_deregister(void)
 #endif
 {
-	if (hs.hdev != NULL) {
-		radio_hci_unregister_dev(hs.hdev);
-		kfree(hs.hdev);
-		hs.hdev = NULL;
-	}
+	radio_hci_unregister_dev(hs.hdev);
+	kfree(hs.hdev);
+	hs.hdev = NULL;
 
 	smd_close(hs.fm_channel);
 	hs.fm_channel = 0;
