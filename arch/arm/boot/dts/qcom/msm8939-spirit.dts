@@ -55,9 +55,7 @@
 		regulator-name = "smb1360_otg_vreg";
 		qcom,fg-reset-at-pon;
 		qcom,fg-reset-thresold-mv = <250>;
-		qcom,parallel-charging-enabled;
 		qcom,max-parallel-current-ma = <0x12c>;
-		qcom,rsense-10mhom;
 		qcom,batt-id-disabled;
 		qcom,shdn-after-pwroff;
 		qcom,config-hard-thresholds;
