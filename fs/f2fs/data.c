@@ -265,8 +265,8 @@ void f2fs_submit_page_mbio(struct f2fs_io_info *fio)
 
 	/* WRITE can be merged into previous WRITE_SYNC */
 	if (io->bio && io->last_block_in_bio == fio->new_blkaddr - 1 &&
-			io->fio.op == fio->op && io->fio.op_flags == WRITE_SYNC)
-		fio->op_flags = WRITE_SYNC;
+						io->fio.rw == WRITE_SYNC)
+		fio->rw = WRITE_SYNC;
 
 	if (io->bio && (io->last_block_in_bio != fio->new_blkaddr - 1 ||
 						io->fio.rw != fio->rw))
