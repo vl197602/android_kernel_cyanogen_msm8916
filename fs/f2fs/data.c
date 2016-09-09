@@ -263,6 +263,11 @@ void f2fs_submit_page_mbio(struct f2fs_io_info *fio)
 
 	down_write(&io->io_rwsem);
 
+	/* WRITE can be merged into previous WRITE_SYNC */
+	if (io->bio && io->last_block_in_bio == fio->new_blkaddr - 1 &&
+						io->fio.rw == WRITE_SYNC)
+		fio->rw = WRITE_SYNC;
+
 	if (io->bio && (io->last_block_in_bio != fio->new_blkaddr - 1 ||
 						io->fio.rw != fio->rw))
 		__submit_merged_bio(io);
@@ -620,7 +625,12 @@ ssize_t f2fs_preallocate_blocks(struct inode *inode, loff_t pos, size_t count, b
 	ssize_t ret = 0;
 
 	map.m_lblk = F2FS_BLK_ALIGN(pos);
-	map.m_len = F2FS_BYTES_TO_BLK(count);
+	map.m_len = F2FS_BYTES_TO_BLK(pos + count);
+	if (map.m_len > map.m_lblk)
+		map.m_len -= map.m_lblk;
+	else
+		map.m_len = 0;
+
 	map.m_next_pgofs = NULL;
 
 	if (f2fs_encrypted_inode(inode))
@@ -665,6 +675,9 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map,
 	struct extent_info ei;
 	bool allocated = false;
 	block_t blkaddr;
+
+	if (!maxblocks)
+		return 0;
 
 	map->m_len = 0;
 	map->m_flags = 0;
@@ -777,6 +790,7 @@ skip:
 		err = reserve_new_blocks(&dn, prealloc);
 		if (err)
 			goto sync_out;
+		allocated = dn.node_changed;
 
 		map->m_len += dn.ofs_in_node - ofs_in_node;
 		if (prealloc && dn.ofs_in_node != last_ofs_in_node + 1) {
@@ -960,8 +974,8 @@ out:
 	return ret;
 }
 
-struct bio *f2fs_grab_bio(struct inode *inode, block_t blkaddr,
-							unsigned nr_pages)
+static struct bio *f2fs_grab_bio(struct inode *inode, block_t blkaddr,
+				 unsigned nr_pages)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct fscrypt_ctx *ctx = NULL;
