@@ -4728,6 +4728,12 @@ int try_to_unmap_ksm(struct page *page,
 	stable_node = page_stable_node(page);
 	if (!stable_node)
 		return SWAP_FAIL;
+
+	if (vma) {
+		ret = try_to_unmap_one(page, vma, address, flags);
+		goto out;
+	}
+
 again:
 	hlist_for_each_entry(node_vma, &stable_node->hlist, hlist) {
 		hlist_for_each_entry(rmap_item, &node_vma->rmap_hlist, hlist) {

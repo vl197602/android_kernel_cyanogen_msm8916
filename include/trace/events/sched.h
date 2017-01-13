@@ -182,11 +182,11 @@ TRACE_EVENT(sched_cpu_load,
 		__entry->idle			= idle;
 		__entry->mostly_idle		= mostly_idle;
 		__entry->nr_running		= rq->nr_running;
-		__entry->nr_big_tasks		= rq->nr_big_tasks;
-		__entry->nr_small_tasks		= rq->nr_small_tasks;
+		__entry->nr_big_tasks		= rq->hmp_stats.nr_big_tasks;
+		__entry->nr_small_tasks		= rq->hmp_stats.nr_small_tasks;
 		__entry->load_scale_factor	= rq->load_scale_factor;
 		__entry->capacity		= rq->capacity;
-		__entry->cumulative_runnable_avg = rq->cumulative_runnable_avg;
+		__entry->cumulative_runnable_avg = rq->hmp_stats.cumulative_runnable_avg;
 		__entry->cur_freq		= rq->cur_freq;
 		__entry->max_freq		= rq->max_freq;
 		__entry->power_cost		= power_cost;
@@ -245,6 +245,9 @@ TRACE_EVENT(sched_update_task_ravg,
 		__field(	u64,	ps			)
 		__field(	u32,	curr_window		)
 		__field(	u32,	prev_window		)
+		__field(	u64,	nt_cs			)
+		__field(	u64,	nt_ps			)
+		__field(	u32,	active_windows		)
 #endif
 	),
 
@@ -268,12 +271,15 @@ TRACE_EVENT(sched_update_task_ravg,
 		__entry->ps             = rq->prev_runnable_sum;
 		__entry->curr_window	= p->ravg.curr_window;
 		__entry->prev_window	= p->ravg.prev_window;
+		__entry->nt_cs		= rq->nt_curr_runnable_sum;
+		__entry->nt_ps		= rq->nt_prev_runnable_sum;
+		__entry->active_windows	= p->ravg.active_windows;
 #endif
 	),
 
 	TP_printk("wc %llu ws %llu delta %llu event %s cpu %d cur_freq %u cur_pid %d task %d (%s) ms %llu delta %llu demand %u sum %u irqtime %llu"
 #ifdef CONFIG_SCHED_FREQ_INPUT
-		" cs %llu ps %llu cur_window %u prev_window %u"
+		" cs %llu ps %llu cur_window %u prev_window %u nt_cs %llu nt_ps %llu active_wins %u"
 #endif
 		, __entry->wallclock, __entry->win_start, __entry->delta,
 		task_event_names[__entry->evt], __entry->cpu,
@@ -283,7 +289,9 @@ TRACE_EVENT(sched_update_task_ravg,
 		__entry->sum, __entry->irqtime
 #ifdef CONFIG_SCHED_FREQ_INPUT
 		, __entry->cs, __entry->ps, __entry->curr_window,
-		  __entry->prev_window
+		  __entry->prev_window,
+		  __entry->nt_cs, __entry->nt_ps,
+		  __entry->active_windows
 #endif
 		)
 );
@@ -317,8 +325,8 @@ TRACE_EVENT(sched_update_history,
 		__entry->demand         = p->ravg.demand;
 		memcpy(__entry->hist, p->ravg.sum_history,
 					RAVG_HIST_SIZE_MAX * sizeof(u32));
-		__entry->nr_big_tasks   = rq->nr_big_tasks;
-		__entry->nr_small_tasks = rq->nr_small_tasks;
+		__entry->nr_big_tasks   = rq->hmp_stats.nr_big_tasks;
+		__entry->nr_small_tasks = rq->hmp_stats.nr_small_tasks;
 		__entry->cpu            = rq->cpu;
 	),
 
@@ -378,37 +386,44 @@ TRACE_EVENT(sched_migration_update_sum,
 		__field(int,		pid			)
 		__field(	u64,	cs			)
 		__field(	u64,	ps			)
+		__field(	s64,	nt_cs			)
+		__field(	s64,	nt_ps			)
 	),
 
 	TP_fast_assign(
 		__entry->cpu		= cpu_of(rq);
 		__entry->cs		= rq->curr_runnable_sum;
 		__entry->ps		= rq->prev_runnable_sum;
+		__entry->nt_cs		= (s64)rq->nt_curr_runnable_sum;
+		__entry->nt_ps		= (s64)rq->nt_prev_runnable_sum;
 		__entry->pid		= p->pid;
 	),
 
-	TP_printk("cpu %d: cs %llu ps %llu pid %d", __entry->cpu,
-		      __entry->cs, __entry->ps, __entry->pid)
+	TP_printk("cpu %d: cs %llu ps %llu nt_cs %lld nt_ps %lld pid %d",
+		  __entry->cpu, __entry->cs, __entry->ps,
+		  __entry->nt_cs, __entry->nt_ps, __entry->pid)
 );
 
 TRACE_EVENT(sched_get_busy,
 
-	TP_PROTO(int cpu, u64 load),
+	TP_PROTO(int cpu, u64 load, u64 nload),
 
-	TP_ARGS(cpu, load),
+	TP_ARGS(cpu, load, nload),
 
 	TP_STRUCT__entry(
 		__field(	int,	cpu			)
 		__field(	u64,	load			)
+		__field(	u64,	nload			)
 	),
 
 	TP_fast_assign(
 		__entry->cpu		= cpu;
 		__entry->load		= load;
+		__entry->nload		= nload;
 	),
 
-	TP_printk("cpu %d load %lld",
-		__entry->cpu, __entry->load)
+	TP_printk("cpu %d load %lld new_task_load %lld",
+		__entry->cpu, __entry->load, __entry->nload)
 );
 
 TRACE_EVENT(sched_freq_alert,
@@ -893,6 +908,28 @@ TRACE_EVENT(sched_pi_setprio,
 	TP_printk("comm=%s pid=%d oldprio=%d newprio=%d",
 			__entry->comm, __entry->pid,
 			__entry->oldprio, __entry->newprio)
+);
+
+TRACE_EVENT(sched_get_nr_running_avg,
+
+	TP_PROTO(int avg, int big_avg, int iowait_avg),
+
+	TP_ARGS(avg, big_avg, iowait_avg),
+
+	TP_STRUCT__entry(
+		__field( int,	avg			)
+		__field( int,	big_avg			)
+		__field( int,	iowait_avg		)
+	),
+
+	TP_fast_assign(
+		__entry->avg		= avg;
+		__entry->big_avg	= big_avg;
+		__entry->iowait_avg	= iowait_avg;
+	),
+
+	TP_printk("avg=%d big_avg=%d iowait_avg=%d",
+		__entry->avg, __entry->big_avg, __entry->iowait_avg)
 );
 
 #endif /* _TRACE_SCHED_H */

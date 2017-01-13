@@ -22,10 +22,12 @@
 #include <linux/msm_adreno_devfreq.h>
 #include <asm/cacheflush.h>
 #include <soc/qcom/scm.h>
+
 #ifdef CONFIG_ADRENO_IDLER
 extern bool adreno_idler_active; 
-#include <linux/powersuspend.h>
+extern bool power_suspended;
 #endif
+
 #include "governor.h"
 
 static DEFINE_SPINLOCK(tz_lock);
@@ -40,7 +42,7 @@ static DEFINE_SPINLOCK(tz_lock);
  */
 #define MIN_BUSY		1000
 /*
-* Use BUSY_BIN to check for fully busy rendering
+ * Use BUSY_BIN to check for fully busy rendering
  * intervals that may need early intervention when
  * seen with LONG_FRAME lengths
  */
@@ -184,6 +186,7 @@ static int tz_init(struct devfreq_msm_adreno_tz_data *priv,
 
 	return ret;
 }
+
 #ifdef CONFIG_ADRENO_IDLER
 extern int adreno_idler(struct devfreq_dev_status stats, struct devfreq *devfreq,
 		 unsigned long *freq);
@@ -205,7 +208,8 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		pr_err(TAG "get_status failed %d\n", result);
 		return result;
 	}
-#ifdef CONFIG_ADRENO_IDLER
+
+	#ifdef CONFIG_ADRENO_IDLER
 	if (adreno_idler_active==true)
 	{
 		/* Prevent overflow */
@@ -216,8 +220,9 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		}
 	}
 	#endif
-	
+
 	*freq = stats.current_frequency;
+
 #ifdef CONFIG_ADRENO_IDLER
 if (adreno_idler_active==true)
 {
@@ -256,7 +261,8 @@ if (adreno_idler_active==true)
 		(unsigned int) priv->bin.busy_time < MIN_BUSY) {
 		return 0;
 	}
-if ((stats.busy_time * 100 / stats.total_time) > BUSY_BIN) {
+
+	if ((stats.busy_time * 100 / stats.total_time) > BUSY_BIN) {
 		busy_bin += stats.busy_time;
 		if (stats.total_time > LONG_FRAME)
 			frame_flag = 1;
@@ -275,7 +281,6 @@ if ((stats.busy_time * 100 / stats.total_time) > BUSY_BIN) {
 	 * If there is an extended block of busy processing,
 	 * increase frequency.  Otherwise run the normal algorithm.
 	 */
-	
 	if (priv->bin.busy_time > CEILING ||
 		(busy_bin > CEILING && frame_flag)) {
 		val = -1 * level;
@@ -411,6 +416,7 @@ static int tz_resume(struct devfreq *devfreq)
 {
 	struct devfreq_dev_profile *profile = devfreq->profile;
 	unsigned long freq;
+
 	#ifdef CONFIG_ADRENO_IDLER
 	suspended = false;
 	#endif

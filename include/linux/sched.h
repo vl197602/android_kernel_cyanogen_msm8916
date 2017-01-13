@@ -164,7 +164,7 @@ extern unsigned long nr_iowait_cpu(int cpu);
 extern unsigned long this_cpu_load(void);
 
 extern void sched_update_nr_prod(int cpu, long delta, bool inc);
-extern void sched_get_nr_running_avg(int *avg, int *iowait_avg);
+extern void sched_get_nr_running_avg(int *avg, int *iowait_avg, int *big_avg);
 
 extern void calc_global_load(unsigned long ticks);
 extern void update_cpu_load_nohz(void);
@@ -744,8 +744,10 @@ struct user_struct {
 	unsigned long mq_bytes;	/* How many bytes can be allocated to mqueue? */
 #endif
 	unsigned long locked_shm; /* How many pages of mlocked shm ? */
-	unsigned long unix_inflight;	/* How many files in flight in unix sockets */
+
 	atomic_long_t pipe_bufs;  /* how many pages are allocated in pipe buffers */
+
+	unsigned long unix_inflight;	/* How many files in flight in unix sockets */
 
 #ifdef CONFIG_KEYS
 	struct key *uid_keyring;	/* UID specific keyring */
@@ -1128,6 +1130,7 @@ struct ravg {
 	u32 sum_history[RAVG_HIST_SIZE_MAX];
 #ifdef CONFIG_SCHED_FREQ_INPUT
 	u32 curr_window, prev_window;
+	u16 active_windows;
 #endif
 };
 
@@ -1791,10 +1794,19 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
 
 extern int task_free_register(struct notifier_block *n);
 extern int task_free_unregister(struct notifier_block *n);
+
+struct sched_load {
+	unsigned long prev_load;
+	unsigned long new_task_load;
+};
+
 #ifdef CONFIG_SCHED_FREQ_INPUT
 extern int sched_set_window(u64 window_start, unsigned int window_size);
 extern unsigned long sched_get_busy(int cpu);
+extern void sched_get_cpus_busy(struct sched_load *busy,
+				const struct cpumask *query_cpus);
 extern void sched_set_io_is_busy(int val);
+int sched_update_freq_max_load(const cpumask_t *cpumask);
 #else
 static inline int sched_set_window(u64 window_start, unsigned int window_size)
 {
@@ -1804,7 +1816,14 @@ static inline unsigned long sched_get_busy(int cpu)
 {
 	return 0;
 }
+static inline void sched_get_cpus_busy(struct sched_load *busy,
+				       const struct cpumask *query_cpus) {};
 static inline void sched_set_io_is_busy(int val) {};
+
+static inline int sched_update_freq_max_load(const cpumask_t *cpumask)
+{
+	return 0;
+}
 #endif
 
 /*
@@ -2215,6 +2234,7 @@ extern void xtime_update(unsigned long ticks);
 
 extern int wake_up_state(struct task_struct *tsk, unsigned int state);
 extern int wake_up_process(struct task_struct *tsk);
+extern int wake_up_process_no_notif(struct task_struct *tsk);
 extern void wake_up_new_task(struct task_struct *tsk);
 #ifdef CONFIG_SMP
  extern void kick_process(struct task_struct *tsk);
